@@ -117,9 +117,8 @@ static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN 0 */
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-	printf("timer\r\n");
 	int i;
-	for (i=0; i==3; i++){
+	for (i=0; i<=3; i++){
 		robomas[i].hensa = robomas[i].trgVel - robomas[i].actVel;
 		if (robomas[i].hensa >= 1000) robomas[i].hensa = 1000;
 		else if (robomas[i].hensa <= -1000) robomas[i].hensa = -1000;
@@ -139,13 +138,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 		TxData[i*2] = (robomas[i].cu) >> 8;
 		TxData[i*2+1] = (uint8_t)((robomas[i].cu) & 0xff);
-		if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader, TxData) != HAL_OK){
-			Error_Handler();
-		}
 		robomas[i].p_actVel = robomas[i].actVel;
 
-		printf("0:%d\r\n", robomas[i].actVel);
 	}
+	if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader, TxData) != HAL_OK){
+		Error_Handler();
+	}
+
 }
 
 
@@ -157,24 +156,14 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			printf("fdcan_getrxmessage is error\r\n");
 			Error_Handler();
 		}
-		if (RxHeader.Identifier == (robomas[R_F-1].CANID)) {
-			robomas[R_F-1].actVel = (int16_t)((RxData[2] << 8) | RxData[3]);
-		}
-/*
+		int i;
+		for (i=0; i<=3;i++){
 
-		else if (RxHeader.Identifier == (robomas[R_B-1].CANID)) {
-			robomas[R_B-1].actVel = (int16_t)((RxData[2] << 8) | RxData[3]);
-		}
-
-
-		else if (RxHeader.Identifier == (robomas[L_F-1].CANID)) {
-			robomas[L_F-1].actVel = (int16_t)((RxData[2] << 8) | RxData[3]);
+			if (RxHeader.Identifier == (robomas[i].CANID)) {
+				robomas[i].actVel = (int16_t)((RxData[2] << 8) | RxData[3]);
+			}
 		}
 
-
-		else if (RxHeader.Identifier == (robomas[L_B-1].CANID)) {
-			robomas[L_B-1].actVel = (int16_t)((RxData[2] << 8) | RxData[3]);
-		}*/
 	}
 
 }
