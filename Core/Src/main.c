@@ -22,7 +22,6 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
-#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -36,14 +35,7 @@
 #define L_F 3
 #define R_B 1
 #define L_B 2
-#define PI 3.14159
 
-const float a0 = PI/180*45;
-const float a1 = PI/180*135;
-const float a2 = PI/180*225;
-const float a3 = PI/180*315;
-const float r = 0.03;
-const float R = 0.20;
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -111,16 +103,12 @@ motor robomas[4] = {
 
 volatile float k_p = 7, k_i = 0.5, k_d = 0.0001;
 float ind[4] = {0, 0, 0 ,0};
-int hekichi=2000;
+int hekichi=1000;
 
 int16_t count=0;
 
 
 
-float w0;
-float w1;
-float w2;
-float w3;
 /*
 float cosa0 = cos(a0);
 float cosa1 = cos(a1);
@@ -150,13 +138,13 @@ static void MX_TIM7_Init(void);
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 	if(htim == &htim6){
-/*		if (count == hekichi){
+		if (count == hekichi){
 			purpose *= -1;
-		}*/
-		robomas[0].trgVel = (int)(-w0 * 36);
-		robomas[1].trgVel = (int)(w1 * 36);
-		robomas[2].trgVel =  (int)(w2 * 36);
-		robomas[3].trgVel = (int)(-w3 * 36);
+		}
+		robomas[0].trgVel = (int)(-purpose * 36);
+		robomas[1].trgVel = (int)(purpose * 36);
+		robomas[2].trgVel =  (int)(purpose * 36);
+		robomas[3].trgVel = (int)(-purpose * 36);
 
 		for (int i=0; i<=3; i++){
 			robomas[i].hensa = robomas[i].trgVel - robomas[i].actVel;
@@ -226,22 +214,6 @@ int _write(int file, char *ptr, int len)
     return len;
 }
 
-void omni_calc(float theta,float vx,float vy,float omega,float *w0,float *w1,float *w2,float *w3){
-  float v[3] = {vx,vy,omega};
-  float sint = sin(theta);
-  float cost = cos(theta);
-
-  float arr[4][3] =
-  {{-cos(a0)*sint-sin(a0)*cost,cos(a0)*cost-sin(a0)*sint,R},
-   {-cos(a1)*sint-sin(a1)*cost,cos(a1)*cost-sin(a1)*sint,R},
-   {-cos(a2)*sint-sin(a2)*cost,cos(a2)*cost-sin(a2)*sint,R},
-   {-cos(a2)*sint-sin(a2)*cost,cos(a2)*cost-sin(a2)*sint,R}};
-
-  *w0 = (arr[0][0] * v[0] + arr[0][1] * v[1] + arr[0][2] * v[2]) / r;
-  *w1 = (arr[1][0] * v[0] + arr[1][1] * v[1] + arr[1][2] * v[2]) / r;
-  *w2 = (arr[2][0] * v[0] + arr[2][1] * v[1] + arr[2][2] * v[2]) / r;
-  *w3 = (arr[3][0] * v[0] + arr[3][1] * v[1] + arr[3][2] * v[2]) / r;
-}
 /* USER CODE END 0 */
 
 /**
@@ -327,7 +299,6 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim6);
   //HAL_TIM_Base_Start_IT(&htim7);
 
-  omni_calc(0, 2, 4, 0, &w0, &w1, &w2, &w3);
 
   /* USER CODE END 2 */
 
