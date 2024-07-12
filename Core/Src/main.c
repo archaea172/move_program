@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,6 +36,14 @@
 #define L_F 3
 #define R_B 1
 #define L_B 2
+#define PI 3.14159
+
+const float a0 = PI/180*45;
+const float a1 = PI/180*135;
+const float a2 = PI/180*225;
+const float a3 = PI/180*315;
+const float r = 0.03;
+const float R = 0.20;
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -46,6 +55,7 @@
 FDCAN_HandleTypeDef hfdcan3;
 
 TIM_HandleTypeDef htim6;
+TIM_HandleTypeDef htim7;
 
 UART_HandleTypeDef huart2;
 
@@ -56,13 +66,12 @@ typedef struct{
 	//int8_t rotDir;//rotation direction
 	int16_t trgVel;//target angle velocity [RPM]
 	volatile int16_t actVel;//actual angle velocity [RPM]
-	volatile int16_t p_actVel;
-	volatile int16_t cu;//output
-	//int16_t sa_cu;
-	//double angle;//[rad]
+	volatile int16_t p_actVel;//past actual velocit[RPM]
+	volatile int16_t cu;//input
+	double angle;//[rad]
 	//double reductionRatio; //@param reduction ratio (1:param)
 	int16_t actCurrent;//actual torque current
-	float hensa;
+	float hensa;//hensa
 }motor;
 
 
@@ -81,7 +90,7 @@ uint32_t TxMailbox;
 //volatile int16_t robomas[l_f-1].actVel;
 //volatile int16_t robomas[l_b-1].actVel;
 
-volatile double purpose = 64;
+volatile int16_t purpose = -32;
 //volatile int16_t robomas[r_f-1].cu=0;
 //volatile int16_t robomas[r_b-1].cu=0;
 //volatile int16_t robomas[l_f-1].cu=0;
@@ -91,15 +100,37 @@ volatile double purpose = 64;
 //volatile int16_t robomas[l_f-1].sa_cu=0;
 //volatile int16_t robomas[l_b-1].sa_cu=0;
 
+
+
 motor robomas[4] = {
-		{0x201, 1, 64*36, 0, 0, 0, 0, 0},
-		{0x202, 2, 64*36, 0, 0, 0, 0, 0},
-		{0x203, 3, 64*36, 0, 0, 0, 0, 0},
-		{0x204, 4, 64*36, 0, 0, 0, 0, 0}
+		{0x201, 1, 0, 0, 0, 0, 0, 0, 0},
+		{0x202, 2, 0, 0, 0, 0, 0, 0, 0},
+		{0x203, 3, 0, 0, 0, 0, 0, 0, 0},
+		{0x204, 4, 0, 0, 0, 0, 0, 0, 0}
 };
 
 volatile float k_p = 7, k_i = 0.5, k_d = 0.0001;
 float ind[4] = {0, 0, 0 ,0};
+int hekichi=2000;
+
+int16_t count=0;
+
+
+
+float w0;
+float w1;
+float w2;
+float w3;
+/*
+float cosa0 = cos(a0);
+float cosa1 = cos(a1);
+float cosa2 = cos(a2);
+float cosa3 = cos(a3);
+float sina0 = sin(a0);
+float sina1 = sin(a1);
+float sina2 = sin(a2);
+float sina3 = sin(a3);
+*/
 
 /* USER CODE END PV */
 
@@ -109,6 +140,7 @@ static void MX_GPIO_Init(void);
 static void MX_FDCAN3_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_TIM7_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -117,33 +149,51 @@ static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN 0 */
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-	int i;
-	for (i=0; i<=3; i++){
-		robomas[i].hensa = robomas[i].trgVel - robomas[i].actVel;
-		if (robomas[i].hensa >= 1000) robomas[i].hensa = 1000;
-		else if (robomas[i].hensa <= -1000) robomas[i].hensa = -1000;
-		float d = (robomas[i].actVel - robomas[i].p_actVel) / 0.001;
-		ind[i] += robomas[i].hensa*0.1;
-		if (d >= 30000) d = 30000;
-		else if (d <= -30000) d = -30000;
-		if (ind[i] >= 10000) ind[i] = 10000;
-		else if (ind[i] <= -10000) ind[i] = -10000;
+	if(htim == &htim6){
+/*		if (count == hekichi){
+			purpose *= -1;
+		}*/
+		robomas[0].trgVel = (int)(-w0 * 36);
+		robomas[1].trgVel = (int)(w1 * 36);
+		robomas[2].trgVel =  (int)(w2 * 36);
+		robomas[3].trgVel = (int)(-w3 * 36);
 
-		float t = k_p*robomas[i].hensa;
-		if (t>=10000) t = 10000;
-		else if (t<=-10000) t = -10000;
-		robomas[i].cu = (int16_t)(t+k_i*ind[i]+k_d*d);
-		if (robomas[i].cu <= -10000) robomas[i].cu = -10000;
-		else if (robomas[i].cu >= 10000) robomas[i].cu = 10000;
+		for (int i=0; i<=3; i++){
+			robomas[i].hensa = robomas[i].trgVel - robomas[i].actVel;
+			if (robomas[i].hensa >= 1000) robomas[i].hensa = 1000;
+			else if (robomas[i].hensa <= -1000) robomas[i].hensa = -1000;
+			float d = (robomas[i].actVel - robomas[i].p_actVel) / 0.001;
+			ind[i] += robomas[i].hensa*0.1;
+			if (d >= 30000) d = 30000;
+			else if (d <= -30000) d = -30000;
+			if (ind[i] >= 10000) ind[i] = 10000;
+			else if (ind[i] <= -10000) ind[i] = -10000;
 
-		TxData[i*2] = (robomas[i].cu) >> 8;
-		TxData[i*2+1] = (uint8_t)((robomas[i].cu) & 0xff);
-		robomas[i].p_actVel = robomas[i].actVel;
 
+			float t = k_p*robomas[i].hensa;
+			if (t>=10000) t = 10000;
+			else if (t<=-10000) t = -10000;
+			robomas[i].cu = (int16_t)(t+k_i*ind[i]+k_d*d);
+			if (robomas[i].cu <= -10000) robomas[i].cu = -10000;
+			else if (robomas[i].cu >= 10000) robomas[i].cu = 10000;
+
+
+			TxData[i*2] = (robomas[i].cu) >> 8;
+			TxData[i*2+1] = (uint8_t)((robomas[i].cu) & 0xff);
+			robomas[i].p_actVel = robomas[i].actVel;
+		}
+		if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader, TxData) != HAL_OK){
+			Error_Handler();
+		}
+		if (count == hekichi){
+			count = 0;
+		}
+		count++;
 	}
-	if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &TxHeader, TxData) != HAL_OK){
-		Error_Handler();
-	}
+/*	if(htim == &htim7){
+		printf("tim7\r\n");
+		purpose *= -1;
+	}*/
 
 }
 
@@ -158,9 +208,10 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 		}
 		int i;
 		for (i=0; i<=3;i++){
-
 			if (RxHeader.Identifier == (robomas[i].CANID)) {
+				robomas[i].angle = (int16_t)((RxData[0] << 8) | RxData[1]);
 				robomas[i].actVel = (int16_t)((RxData[2] << 8) | RxData[3]);
+				robomas[i].actCurrent = (int16_t)((RxData[4] << 8) | RxData[5]);
 			}
 		}
 
@@ -173,6 +224,23 @@ int _write(int file, char *ptr, int len)
 {
     HAL_UART_Transmit(&huart2,(uint8_t *)ptr,len,10);
     return len;
+}
+
+void omni_calc(float theta,float vx,float vy,float omega,float *w0,float *w1,float *w2,float *w3){
+  float v[3] = {vx,vy,omega};
+  float sint = sin(theta);
+  float cost = cos(theta);
+
+  float arr[4][3] =
+  {{-cos(a0)*sint-sin(a0)*cost,cos(a0)*cost-sin(a0)*sint,R},
+   {-cos(a1)*sint-sin(a1)*cost,cos(a1)*cost-sin(a1)*sint,R},
+   {-cos(a2)*sint-sin(a2)*cost,cos(a2)*cost-sin(a2)*sint,R},
+   {-cos(a2)*sint-sin(a2)*cost,cos(a2)*cost-sin(a2)*sint,R}};
+
+  *w0 = (arr[0][0] * v[0] + arr[0][1] * v[1] + arr[0][2] * v[2]) / r;
+  *w1 = (arr[1][0] * v[0] + arr[1][1] * v[1] + arr[1][2] * v[2]) / r;
+  *w2 = (arr[2][0] * v[0] + arr[2][1] * v[1] + arr[2][2] * v[2]) / r;
+  *w3 = (arr[3][0] * v[0] + arr[3][1] * v[1] + arr[3][2] * v[2]) / r;
 }
 /* USER CODE END 0 */
 
@@ -209,6 +277,7 @@ int main(void)
   MX_FDCAN3_Init();
   MX_TIM6_Init();
   MX_USART2_UART_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
   printf("start\r\n");
   TxHeader.Identifier = 0x000;
@@ -253,16 +322,22 @@ int main(void)
 
 
 
+
+  TxHeader.Identifier = 0x200;
   HAL_TIM_Base_Start_IT(&htim6);
+  //HAL_TIM_Base_Start_IT(&htim7);
+
+  omni_calc(0, 2, 4, 0, &w0, &w1, &w2, &w3);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  TxHeader.Identifier = 0x200;
   while (1)
   {
+	  printf("count:%d,purpose:%d,cu:%d,trgVel:%d,actVel:%d,hensa:%d\r\n", count, purpose, robomas[0].cu, robomas[0].trgVel, robomas[0].actVel, (int)robomas[0].hensa);
+	  HAL_Delay(1);
     /* USER CODE END WHILE */
-
 
     /* USER CODE BEGIN 3 */
   }
@@ -397,6 +472,44 @@ static void MX_TIM6_Init(void)
 }
 
 /**
+  * @brief TIM7 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM7_Init(void)
+{
+
+  /* USER CODE BEGIN TIM7_Init 0 */
+
+  /* USER CODE END TIM7_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM7_Init 1 */
+
+  /* USER CODE END TIM7_Init 1 */
+  htim7.Instance = TIM7;
+  htim7.Init.Prescaler = 999;
+  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim7.Init.Period = 8999;
+  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM7_Init 2 */
+
+  /* USER CODE END TIM7_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -477,6 +590,7 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
+	  printf("Error\r\n");
   }
   /* USER CODE END Error_Handler_Debug */
 }
